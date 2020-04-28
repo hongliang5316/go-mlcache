@@ -118,7 +118,7 @@ func sh(key string, val interface{}, ttl time.Duration, ctx interface{}) error {
 
 // L3 GetCacheHandler
 func l3gh(key string, ctx interface{}) (interface{}, bool, error) {
-	c, err := redis.Dial("tcp", addr2)
+	c, _ := redis.Dial("tcp", addr2)
 	val, err := c.Do("GET", key)
 	found := true
 	// nil or interface{}{}
@@ -153,7 +153,7 @@ func TestMlCache3(t *testing.T) {
 
 	var t_ time.Time
 	var found bool
-	val, t_, found = mlc.(*mLCache).L1.GetWithExpiration("foo")
+	_, t_, found = mlc.(*mLCache).L1.GetWithExpiration("foo")
 	if !found {
 		t.Error("foo's val was not found in L1 cache")
 	}
@@ -188,8 +188,8 @@ func TestMlCache4(t *testing.T) {
 
 // new gh
 func gh2(key string, ctx interface{}) (interface{}, bool, error) {
-	c, err := redis.Dial("tcp", addr)
-	_, err = c.Do("SET", key, "foo-bar")
+	c, _ := redis.Dial("tcp", addr)
+	c.Do("SET", key, "foo-bar")
 	val, err := c.Do("GET", key)
 	found := true
 	// nil or interface{}{}
@@ -259,7 +259,7 @@ func TestMlCache6(t *testing.T) {
 	}
 
 	// check if set to L2
-	c, err := redis.Dial("tcp", addr)
+	c, _ := redis.Dial("tcp", addr)
 	val, err = c.Do("GET", "foobar")
 	if err != nil {
 		t.Error("err != nil")

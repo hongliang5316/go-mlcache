@@ -52,15 +52,14 @@ type LC struct {
 	SetCacheHandler SetCacheHandler
 }
 
-// Implement the MLCache interface
 type mLCache struct {
 	// L1 cache ---> go cache
 	L1 *cache.Cache
 
-	// L2 cache ---> redis/memcached cache
+	// L2 cache ---> redis cache
 	L2 *LC
 
-	// L3 cache ---> mysql/postgresql cache
+	// L3 cache ---> mysql cache
 	L3 *LC
 
 	// retry times when get/set handler failed
@@ -99,6 +98,7 @@ func New(
 // 2. set from l2 cache
 // 3. set from l3 cache
 func (mlc *mLCache) Get(key string, opt Opt, ctx interface{}) (val interface{}, cs CacheStatus, err error) {
+	// err can not be nil
 	val, cs, err = mlc.GetFromL1Cache(key, ctx)
 	if err != nil {
 		return
@@ -107,6 +107,12 @@ func (mlc *mLCache) Get(key string, opt Opt, ctx interface{}) (val interface{}, 
 	// hit l1 cache
 	if cs.Found && !cs.Stale {
 		cs.CacheFlag = "L1"
+		return
+	}
+
+	// no L2 cache, should not let val/cs/err be covered
+	gh, _ := cacheHandler(opt.L2, mlc.L2)
+	if gh == nil {
 		return
 	}
 
@@ -150,9 +156,6 @@ func (mlc *mLCache) GetFromL2Cache(key string, opt Opt, ctx interface{}) (val in
 			break
 		}
 	}
-	if err != nil {
-		return
-	}
 	cs.Found = found
 	cs.Stale = false
 	return
@@ -176,9 +179,6 @@ func (mlc *mLCache) GetFromL3Cache(key string, opt Opt, ctx interface{}) (val in
 		if retry == 0 {
 			break
 		}
-	}
-	if err != nil {
-		return
 	}
 	cs.Found = found
 	cs.Stale = false
@@ -255,6 +255,12 @@ func (mlc *mLCache) GetFromL2AndSetL1Cache(key string, opt Opt, ctx interface{})
 	// missing L2 cache
 	// should lookup from L3 cache and set L1, L2 cache
 	if !cs.Found || err != nil {
+		// no L3 cache, should not let val/cs/err be covered
+		gh, _ := cacheHandler(opt.L3, mlc.L3)
+		if gh == nil {
+			return
+		}
+
 		val, cs, err = mlc.GetFromL3AndSetL1L2Cache(key, opt, ctx)
 		return
 	}

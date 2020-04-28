@@ -3,8 +3,11 @@
 vet: version
 	go vet ./...
 
+ineffassign:
+	ineffassign .
+
 version:
 	go version
 
-test: vet
+test: ineffassign vet
 	GORACE=history_size=7 gotest -gcflags='-l' -race -v ./...

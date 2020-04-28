@@ -2,6 +2,7 @@ language: go
 go:
   - 1.14.x
 install:
-  - go get -u github.com/rakyll/gotest
+  - go get -u -v github.com/rakyll/gotest
+  - go get -u -v github.com/gordonklaus/ineffassign
 script:
   - make test
