@@ -129,11 +129,13 @@ func (mlc *mLCache) Get(key string, opt Opt, ctx interface{}) (val interface{}, 
 
 func (mlc *mLCache) GetFromL1Cache(key string, ctx interface{}) (val interface{}, cs CacheStatus, err error) {
 	var found bool
+
 	l1 := mlc.L1
 	val, found = l1.Get(key)
 	// cs.ttl = 0
 	cs.Found = found
 	cs.Stale = false
+
 	return
 }
 
@@ -144,20 +146,26 @@ func (mlc *mLCache) GetFromL2Cache(key string, opt Opt, ctx interface{}) (val in
 		cs.Stale = false
 		return
 	}
-	retry := mlc.Retry
+
 	var found bool
+	retry := mlc.Retry
+
 	for {
 		val, found, err = gh(key, ctx)
 		if err == nil {
 			break
 		}
+
 		retry--
+
 		if retry == 0 {
 			break
 		}
 	}
+
 	cs.Found = found
 	cs.Stale = false
+
 	return
 }
 
@@ -168,8 +176,10 @@ func (mlc *mLCache) GetFromL3Cache(key string, opt Opt, ctx interface{}) (val in
 		cs.Stale = false
 		return
 	}
-	retry := mlc.Retry
+
 	var found bool
+	retry := mlc.Retry
+
 	for {
 		val, found, err = gh(key, ctx)
 		if err == nil {
@@ -180,8 +190,10 @@ func (mlc *mLCache) GetFromL3Cache(key string, opt Opt, ctx interface{}) (val in
 			break
 		}
 	}
+
 	cs.Found = found
 	cs.Stale = false
+
 	return
 }
 
@@ -196,10 +208,12 @@ func cacheHandler(lc *LC, lc2 *LC) (gh GetCacheHandler, sh SetCacheHandler) {
 		match = false
 		gh = nil
 	}
+
 	if lc != nil && lc.GetCacheHandler == nil && (lc2 == nil || lc2.GetCacheHandler == nil) {
 		match = false
 		gh = nil
 	}
+
 	if match {
 		if lc != nil && lc.GetCacheHandler != nil {
 			gh = lc.GetCacheHandler
@@ -213,10 +227,12 @@ func cacheHandler(lc *LC, lc2 *LC) (gh GetCacheHandler, sh SetCacheHandler) {
 		match = false
 		sh = nil
 	}
+
 	if lc != nil && lc.SetCacheHandler == nil && (lc2 == nil || lc2.SetCacheHandler == nil) {
 		match = false
 		sh = nil
 	}
+
 	if match {
 		if lc != nil && lc.SetCacheHandler != nil {
 			sh = lc.SetCacheHandler
@@ -224,6 +240,7 @@ func cacheHandler(lc *LC, lc2 *LC) (gh GetCacheHandler, sh SetCacheHandler) {
 			sh = lc2.SetCacheHandler
 		}
 	}
+
 	return
 }
 
@@ -232,7 +249,9 @@ func (mlc *mLCache) SetL2Cache(key string, val interface{}, opt Opt, ctx interfa
 	if sh == nil {
 		return
 	}
+
 	retry := mlc.Retry
+
 	for {
 		err = sh(key, val, opt.Ttl, ctx)
 		if err == nil {
@@ -243,6 +262,7 @@ func (mlc *mLCache) SetL2Cache(key string, val interface{}, opt Opt, ctx interfa
 			break
 		}
 	}
+
 	return
 }
 
@@ -270,6 +290,7 @@ func (mlc *mLCache) GetFromL2AndSetL1Cache(key string, opt Opt, ctx interface{})
 	// hit L2 cache
 	// should set L1 cache
 	mlc.SetL1Cache(key, val, opt)
+
 	return
 }
 
@@ -285,6 +306,7 @@ func (mlc *mLCache) GetFromL3AndSetL1L2Cache(key string, opt Opt, ctx interface{
 	// should set L1 and L2 cache
 	mlc.SetL2Cache(key, val, opt, ctx)
 	mlc.SetL1Cache(key, val, opt)
+
 	return
 }
 
