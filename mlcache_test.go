@@ -1,10 +1,8 @@
-// Copyright (C) Liang Hong (lianghong@tencent.com)
-
 package mlcache
 
 import (
-	// "fmt"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,12 +47,15 @@ func TestMlCache(t *testing.T) {
 	val, cs, err := mlc.Get("foo", Opt{Ttl: 5 * time.Second, L2: nil, L3: nil}, nil)
 	if err != nil {
 		t.Error("err != nil")
+		return
 	}
 	if cs.Found {
 		t.Error("foo was found")
+		return
 	}
 	if val != nil {
 		t.Error("foo val was not nil")
+		return
 	}
 }
 
@@ -138,17 +139,22 @@ func TestMlCache3(t *testing.T) {
 	}
 	mlc := New(3, cache.DefaultExpiration, 0, lc, nil)
 	val, cs, err := mlc.Get("foo", Opt{Ttl: 5 * time.Second}, nil)
+
 	if err != nil {
 		t.Error("err != nil")
+		return
 	}
 	if !cs.Found {
 		t.Error("foo's val was not found")
+		return
 	}
 	if string(val.([]byte)) != "bar" {
 		t.Error("foo's val was not equal bar")
+		return
 	}
 	if cs.CacheFlag != "L2" {
 		t.Error("foo's val was not found in L2 cache")
+		return
 	}
 
 	var t_ time.Time
@@ -156,10 +162,12 @@ func TestMlCache3(t *testing.T) {
 	_, t_, found = mlc.(*mLCache).L1.GetWithExpiration("foo")
 	if !found {
 		t.Error("foo's val was not found in L1 cache")
+		return
 	}
 	ttl := t_.Unix() - time.Now().Unix()
 	if ttl != 5 {
 		t.Errorf("foo's val ttl is not equal 5, ttl: %d", ttl)
+		return
 	}
 }
 
@@ -174,15 +182,19 @@ func TestMlCache4(t *testing.T) {
 	val, cs, err := mlc.Get("foo", Opt{Ttl: 5 * time.Second, L2: lc}, nil)
 	if err != nil {
 		t.Error("err != nil")
+		return
 	}
 	if !cs.Found {
 		t.Error("foo's val was not found")
+		return
 	}
 	if string(val.([]byte)) != "bar" {
 		t.Error("foo's val was not equal bar")
+		return
 	}
 	if cs.CacheFlag != "L2" {
 		t.Error("foo's val was not found in L2 cache")
+		return
 	}
 }
 
@@ -217,15 +229,19 @@ func TestMlCache5(t *testing.T) {
 	val, cs, err := mlc.Get("foo", opt, nil)
 	if err != nil {
 		t.Error("err != nil")
+		return
 	}
 	if !cs.Found {
 		t.Error("foo's val was not found")
+		return
 	}
 	if string(val.([]byte)) != "foo-bar" {
 		t.Error("foo's val was not equal bar")
+		return
 	}
 	if cs.CacheFlag != "L2" {
 		t.Error("foo's val was not found in L2 cache")
+		return
 	}
 }
 
@@ -247,15 +263,19 @@ func TestMlCache6(t *testing.T) {
 	val, cs, err := mlc.Get("foobar", Opt{Ttl: 5 * time.Second, L2: l2lc, L3: l3lc}, nil)
 	if err != nil {
 		t.Error("err != nil")
+		return
 	}
 	if !cs.Found {
 		t.Error("foobar's val was not found")
+		return
 	}
 	if string(val.([]byte)) != "foo/bar" {
 		t.Error("foobar's val was not equal foo/bar")
+		return
 	}
 	if cs.CacheFlag != "L3" {
 		t.Error("foo's val was not found in L3 cache")
+		return
 	}
 
 	// check if set to L2
@@ -263,18 +283,22 @@ func TestMlCache6(t *testing.T) {
 	val, err = c.Do("GET", "foobar")
 	if err != nil {
 		t.Error("err != nil")
+		return
 	}
 	if string(val.([]byte)) != "foo/bar" {
 		t.Error("foobar's val in L2 cache was not equal foo/bar")
+		return
 	}
 
 	// check if set to L1
 	value, found := mlc.(*mLCache).L1.Get("foobar")
 	if !found {
 		t.Error("foobar's val was not in L1 cache")
+		return
 	}
 	if string(value.([]byte)) != "foo/bar" {
 		t.Error("foobar's val in L2 cache was not equal foo/bar")
+		return
 	}
 }
 
@@ -294,15 +318,19 @@ func TestMlCache7(t *testing.T) {
 	val, cs, err := mlc.Get("foo", Opt{Ttl: 5 * time.Second, L2: l2lc, L3: l3lc}, nil)
 	if err != nil {
 		t.Error("err != nil")
+		return
 	}
 	if !cs.Found {
 		t.Error("foo's val was not found")
+		return
 	}
 	if val == nil {
 		t.Error("foo' val was nil")
+		return
 	}
 	if cs.CacheFlag != "L3" {
 		t.Error("foo's val was not found in L3 cache")
+		return
 	}
 }
 
@@ -335,17 +363,62 @@ func TestMlCache8(t *testing.T) {
 	val, cs, err := mlc.Get("foo", Opt{Ttl: 5 * time.Second, L2: l2lc, L3: l3lc}, &ctx)
 	if err != nil {
 		t.Error("err != nil")
+		return
 	}
 	if !cs.Found {
 		t.Error("foo's val was not found")
+		return
 	}
 	if val.(string) != "ok" {
 		t.Error("val's val was not found")
+		return
 	}
 	if cs.CacheFlag != "L3" {
 		t.Error("foo's val was not found in L3 cache")
+		return
 	}
 	if ctx != "changeTestCtx" {
 		t.Error("ctx's val not equal changeTestCtx")
+		return
+	}
+}
+
+func TestConcurrecy(t *testing.T) {
+	lc := &LC{
+		GetCacheHandler: gh,
+		SetCacheHandler: sh,
+	}
+	mlc := New(3, cache.DefaultExpiration, 0, lc, nil)
+
+	wg := new(sync.WaitGroup)
+	mu := new(sync.Mutex)
+
+	flags := make([]string, 100)
+
+	// only one goroutine should access L2 cache
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, cs, _ := mlc.Get("foo", Opt{Ttl: 5 * time.Second, Timeout: 5 * time.Second}, nil)
+			mu.Lock()
+			flags = append(flags, cs.CacheFlag)
+			mu.Unlock()
+		}()
+	}
+
+	wg.Wait()
+
+	// check flags
+	match := false
+	for _, v := range flags {
+		if v == "L2" && match {
+			t.Errorf("TestConcurrecy failed, multipule goroutines access L2 cache")
+			return
+		}
+
+		if v == "L2" {
+			match = true
+		}
 	}
 }

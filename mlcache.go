@@ -1,5 +1,3 @@
-// Copyright (C) Liang Hong (lianghong@tencent.com)
-
 package mlcache
 
 import (
@@ -28,6 +26,8 @@ type CacheStatus struct {
 type Opt struct {
 	// the ttl of key life cycle
 	Ttl time.Duration
+
+	Timeout time.Duration
 
 	// L2 cache handler
 	L2 *LC
@@ -66,7 +66,7 @@ type mLCache struct {
 	Retry int
 
 	// lock cache key
-	Lock map[string]chan struct{}
+	Lock *KeyLock
 
 	// global mutex
 	Mu *sync.Mutex
@@ -81,7 +81,7 @@ func New(
 	return &mLCache{
 		L1:    cache.New(defaultExpiration, cleanupInterval),
 		Retry: retry,
-		Lock:  make(map[string]chan struct{}),
+		Lock:  newKeyLock(0),
 		L2:    l2,
 		L3:    l3,
 		Mu:    &sync.Mutex{},
@@ -117,13 +117,36 @@ func (mlc *mLCache) Get(key string, opt Opt, ctx interface{}) (val interface{}, 
 	}
 
 	// missing L1 cache
-	// if Trylock failed, return nil / staled value
-	// if Trylock success, should lookup from L2 cache and set L1 cache
-	// if !mlc.Trylock(key) {
-	// 	return
-	// }
-	// defer mlc.Unlock(key)
+	timeout := opt.Timeout
+	if timeout == 0 {
+		timeout = 3 * time.Second
+	}
+
+	if !mlc.Lock.TimeoutLock(key, timeout) {
+		return
+	}
+
+	// get lock
+	defer mlc.Lock.Unlock(key)
+
+	// first: fetch from L1 cache
+	val, cs, err = mlc.GetFromL1Cache(key, ctx)
+	if err != nil {
+		return
+	}
+
+	// hit l1 cache
+	if cs.Found && !cs.Stale {
+		cs.CacheFlag = "L1"
+		return
+	}
+
+	// second: fetch from L2 cache and set to L1 cache
 	val, cs, err = mlc.GetFromL2AndSetL1Cache(key, opt, ctx)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -324,26 +347,4 @@ func (mlc *mLCache) SetL3SetCacheHandler(f SetCacheHandler) {
 
 func (mlc *mLCache) GetL3GetCacheHandler(f GetCacheHandler) {
 	mlc.L3.GetCacheHandler = f
-}
-
-func (mlc *mLCache) Trylock(key string) bool {
-	mlc.Mu.Lock()
-	ch, ok := mlc.Lock[key]
-	if !ok {
-		mlc.Lock[key] = make(chan struct{})
-	}
-	mlc.Mu.Unlock()
-	select {
-	case ch <- struct{}{}:
-		return true
-	default:
-		return false
-	}
-}
-
-func (mlc *mLCache) Unlock(key string) {
-	mlc.Mu.Lock()
-	defer mlc.Mu.Unlock()
-	<-mlc.Lock[key]
-	// delete(mlc.Lock, key)
 }
