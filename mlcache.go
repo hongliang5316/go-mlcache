@@ -1,8 +1,7 @@
 package mlcache
 
 import (
-	// "errors"
-	// "fmt"
+	"fmt"
 	"sync"
 	"time"
 
@@ -123,6 +122,9 @@ func (mlc *mLCache) Get(key string, opt Opt, ctx interface{}) (val interface{}, 
 	}
 
 	if !mlc.Lock.TimeoutLock(key, timeout) {
+		val = nil
+		cs.Found = false
+		err = fmt.Errorf("timeout lock key %s", key)
 		return
 	}
 
